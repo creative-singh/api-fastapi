@@ -40,6 +40,11 @@ def get_db():
 
 db_dependency = Annotated[Session, Depends(get_db)]
 
+# Health CheckUp
+@app.get("/")
+def health_check():
+  return "The health check is successful!"
+
 # Get All Users
 @app.get("/users/")
 async def read_users(db: db_dependency):
