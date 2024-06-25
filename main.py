@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import inspect
 from uuid import UUID
 from sqlalchemy.exc import NoResultFound
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
 app = FastAPI()
 models.Base.metadata.create_all(bind=engine)
@@ -111,80 +111,115 @@ async def read_productById(id: UUID, db: db_dependency):
       raise HTTPException(status_code=404, detail="Product not found.")
   return product
 
-# # Update table by Table Name and Entity ID
-# @app.put("/taxonomy/entities/{entity_name}/{id}")
-# async def update_entityById(id: UUID, entity_name: str,  db: db_dependency):
-
-#   if(entity_name == "user"):
-#     db_object = read_userById(id, db)
-#     user = UserBase
-#     key = 'user'
-
-#     db_object.name = user.name
-#     db_object.email = user.email
-#     db_object.is_active = user.is_active
-#   else:
-#     db_object = read_productById(id, db)
-#     product = ProductBase
-#     key = 'product'
-
-#     db_object.name = product.name
-#     db_object.price = product.price
-#     db_object.description = product.description
-#     db_object.quantity = product.quantity
-
-#   db.commit()
-#   db.refresh(db_object)
-#   return {"message": f"{key} Updated Successfully.", key: db_object}
-
-# Helper function to update an instance
-def update_instance(db: Session, model, instance_id: UUID, update_data: Dict[str, Any]):
-    print("db is here :: ", db)
-    print("model is here :: ", model)
-    print("instance_id is here :: ", instance_id)
-    print("update_data is here :: ", update_data)
-
-    instance = db.query(model).filter(model.user_id == instance_id).first() if model == "model.User" else db.query(model).filter(model.product_id == instance_id).first()
-    if not instance:
-        raise HTTPException(status_code=404, detail=f"{model.__name__} not found")
-    
-    for key, value in update_data.items():
-        setattr(instance, key, value)
-    
-    db.commit()
-    db.refresh(instance)
-    return instance
-
-@app.put("/update/{entity_name}/{instance_id}")
-async def update_any_table(entity_name: str, instance_id: UUID, request: Request, db: db_dependency):
-  ENTITY_MAP = list_tables()
-  if entity_name not in ENTITY_MAP["tables"]:
-    raise HTTPException(status_code=400, detail="Invalid ENTITY name")
-  
-  if entity_name == "user":
-    model = model.User
+# Update a User by ID
+@app.put("/taxonomy/entities/{entity_name}/{id}")
+async def update_user_by_id(id: UUID, entity_name: str, payload: Union[UserBase, ProductBase], db: db_dependency):
+  if(entity_name == "user"):
+    db_obj = db.query(models.User).filter(models.User._id == id).first()
+    # Checking if user has any associated products
+    associated_products = db.query(models.Product).filter(models.Product.user_id == id).all()
+    if associated_products:
+      raise HTTPException(status_code=400, detail="This user has associated products. Delete the products first.")
   else:
-    model = model.Product
+    db_obj = db.query(models.Product).filter(models.Product._id == id).first()
 
-  update_data = await request.json()
+  if not db_obj:
+    raise HTTPException(status_code=404, detail=f"{entity_name} not found")
   
-  try:
-    updated_instance = update_instance(db, model, instance_id, update_data)
-    return updated_instance
-  except NoResultFound:
-    raise HTTPException(status_code=404, detail=f"{entity_name.capitalize()} with id {instance_id} not found")
+  for key, value in payload:
+    setattr(db_obj, key, value)
+
+  db.commit()
+  db.refresh(db_obj)
+  return {"message": f"{entity_name} Updated Successfully.", "entity": db_obj}
 
 # Delete a record by Table Name and Entity ID
 @app.delete("/taxonomy/entities/{entity_name}/{id}")
-async def update_entityById(id: UUID, entity_name:str, db: db_dependency):
+async def delete_entity_by_id(id: UUID, entity_name: str, db: db_dependency):
   if(entity_name == "user"):
-    db_object = read_userById(id, db)
-    key = 'user'
-    
+    db_object = db.query(models.User).filter(models.User._id == id).first()
+    # Checking if user has any associated products
+    associated_products = db.query(models.Product).filter(models.Product.user_id == id).all()
+    if associated_products:
+      raise HTTPException(status_code=400, detail="This user has associated products. Delete the products first.")
   else:
-    db_object = read_productById(id, db)
-    key = 'product'
-
+    db_object = db.query(models.Product).filter(models.Product._id == id).first()
+  
+  if not db_object:
+    raise HTTPException(status_code=404, detail=f"{entity_name} not found")
+    
   db.delete(db_object)
   db.commit()
-  return {"message": f"{key} Deleted Successfully."}
+  return {"message": f"{entity_name} Deleted Successfully."}
+
+# Helper function to update an instance
+# def update_instance(db: Session, model, instance_id: UUID, update_data: Dict[str, Any]):
+#     print("db is here :: ", db)
+#     print("model is here :: ", model)
+#     print("instance_id is here :: ", instance_id)
+#     print("update_data is here :: ", update_data)
+
+#     instance = db.query(model).filter(model._id == instance_id).first() 
+
+#     if not instance:
+#         raise HTTPException(status_code=404, detail=f"{model.__name__} not found")
+    
+#     print("I REACHED HERE ...... ")
+    
+#     for key, value in update_data.items():
+#         setattr(instance, key, value)
+    
+#     db.commit()
+#     db.refresh(instance)
+#     return instance
+
+# @app.put("/update/{entity_name}/{instance_id}")
+# async def update_any_table(
+#     entity_name: str, 
+#     instance_id: UUID, 
+#     request: Union[UserBase, ProductBase],  
+#     db: db_dependency
+#   ):
+
+#   print("I M AT 169")
+  
+#   ENTITY_MAP = list_tables()
+#   if entity_name not in ENTITY_MAP["tables"]:
+#     raise HTTPException(status_code=400, detail="Invalid ENTITY name")
+  
+#   print("I M AT 175", ENTITY_MAP)
+
+#   if entity_name == "user":
+#     model = model.User
+#   else:
+#     model = model.Product
+
+#   update_data = request.dict(exclude_unset=True)
+
+#   print(" UPDATE DATA :: ", update_data)
+#   print("DB :: ", db)
+#   print("MODEL ::: ", model)
+#   print("INSTANCE ID :: ", instance_id)
+#   print("REQUEST :: ", update_data)
+  
+  
+#   try:
+#     updated_instance = update_instance(db, model, instance_id, update_data)
+#     return updated_instance
+#   except NoResultFound:
+#     raise HTTPException(status_code=404, detail=f"{entity_name.capitalize()} with id {instance_id} not found")
+
+# Delete a record by Table Name and Entity ID
+# @app.delete("/taxonomy/entities/{entity_name}/{id}")
+# async def update_entityById(id: UUID, entity_name:str, db: db_dependency):
+#   if(entity_name == "user"):
+#     db_object = read_userById(id, db)
+#     key = 'user'
+    
+#   else:
+#     db_object = read_productById(id, db)
+#     key = 'product'
+
+#   db.delete(db_object)
+#   db.commit()
+#   return {"message": f"{key} Deleted Successfully."}
