@@ -4,7 +4,7 @@ from typing import Annotated
 import models
 from database import SessionLocal, engine
 from sqlalchemy.orm import Session
-from sqlalchemy import inspect
+from sqlalchemy import inspect, MetaData, Table, select
 from uuid import UUID
 from sqlalchemy.exc import NoResultFound
 from typing import Any, Dict, Union
@@ -164,6 +164,30 @@ async def delete_entity_by_id(id: UUID, entity_name: str, db: db_dependency):
   db.commit()
   return {"message": f"{entity_name} Deleted Successfully."}
 
+# Get All the Tables Data
+@app.get("/taxonomy/data/{entity_name}")
+async def read_all_data(entity_name: str, db: db_dependency):
+  tables_list = await list_tables()
+
+  # Check if the table name is valid
+  if entity_name not in tables_list["tables"]:
+    raise HTTPException(status_code=404, detail=f"Table {entity_name} not found")
+  
+  metadata = MetaData()
+  metadata.bind = engine
+  selected_table = Table(entity_name, metadata, autoload_with=engine)
+
+  query = select(selected_table)
+  result = db.execute(query).fetchall()
+  
+  # Get column names
+  column_names = [column.name for column in selected_table.columns]
+
+  # Convert records to list of dictionaries
+  result_dicts = [dict(zip(column_names, row)) for row in result]
+    
+  return result_dicts
+    
 # Helper function to update an instance
 # def update_instance(db: Session, model, instance_id: UUID, update_data: Dict[str, Any]):
 #     print("db is here :: ", db)
