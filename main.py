@@ -50,12 +50,24 @@ def health_check():
   return "The health check is successful!"
 
 # Get All the Tables from Schema
-# TODO: // NEED TO RETURN TABLE FIELDS AS WELL
 @app.get("/taxonomy/entities") 
 async def list_tables():
   inspector = inspect(engine)
   tables = inspector.get_table_names(schema="public")
   return {"tables": tables}
+
+# Get All the Tables with Fields from Schema
+@app.get("/taxonomy/entities/fields")  
+async def list_tables_fields():
+  inspector = inspect(engine)
+  tables = inspector.get_table_names(schema="public")
+  
+  tables_with_fields = {}
+  for table in tables:
+    columns = inspector.get_columns(table, schema="public")
+    tables_with_fields[table] = [column["name"] for column in columns]
+  
+  return {"tables": tables_with_fields}
 
 # Get All Users
 @app.get("/users/")
